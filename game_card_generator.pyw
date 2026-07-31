@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import messagebox, filedialog, colorchooser
 from google import genai
 import json
 import webbrowser
@@ -20,13 +20,16 @@ class GameCardGeneratorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Game Card Generator")
-        self.root.geometry("600x550")
+        self.root.geometry("600x650")
         
         # Session memory to ensure NO repeats while the app is open
         self.session_words = set()
         
         # Default save directory (where the script is located)
         self.output_dir = os.getcwd()
+        
+        # Default card color (White)
+        self.card_color = "#ffffff"
 
         # Configure Client using the new SDK standard
         self.client = genai.Client(api_key=API_KEY)
@@ -35,7 +38,7 @@ class GameCardGeneratorApp:
 
     def setup_ui(self):
         # --- Save Location Section ---
-        tk.Label(self.root, text="Save Location:", font=("Arial", 10, "bold")).pack(pady=(15, 0))
+        tk.Label(self.root, text="Save Location:", font=("Arial", 10, "bold")).pack(pady=(10, 0))
         
         dir_frame = tk.Frame(self.root)
         dir_frame.pack(pady=5)
@@ -46,7 +49,7 @@ class GameCardGeneratorApp:
         tk.Button(dir_frame, text="Browse...", command=self.choose_directory).pack(side="left")
 
         # --- Divider ---
-        tk.Frame(self.root, height=1, bg="grey").pack(fill="x", padx=20, pady=15)
+        tk.Frame(self.root, height=1, bg="grey").pack(fill="x", padx=20, pady=10)
 
         # --- Instructions & Presets ---
         tk.Label(self.root, text="Card Category / Search Criteria:", font=("Arial", 12, "bold")).pack()
@@ -62,12 +65,26 @@ class GameCardGeneratorApp:
 
         # Input field
         self.criteria_entry = tk.Entry(self.root, width=55, font=("Arial", 12))
-        self.criteria_entry.pack(pady=10)
+        self.criteria_entry.pack(pady=5)
         self.criteria_entry.insert(0, "General pop culture, geography, and technology")
+
+        # --- Divider ---
+        tk.Frame(self.root, height=1, bg="grey").pack(fill="x", padx=20, pady=10)
+
+        # --- Color Picker Section ---
+        color_frame = tk.Frame(self.root)
+        color_frame.pack(pady=5)
+        
+        tk.Label(color_frame, text="Card Background Color:", font=("Arial", 10, "bold")).pack(side="left", padx=5)
+        
+        self.color_preview = tk.Label(color_frame, text="      ", bg=self.card_color, relief="solid", borderwidth=1)
+        self.color_preview.pack(side="left", padx=5)
+        
+        tk.Button(color_frame, text="Pick Color", command=self.choose_color).pack(side="left", padx=5)
 
         # --- Generate Button ---
         self.generate_btn = tk.Button(self.root, text="Generate 1 New Page (16 Cards)", font=("Arial", 12, "bold"), bg="#4CAF50", fg="white", command=self.start_generation_thread)
-        self.generate_btn.pack(pady=25)
+        self.generate_btn.pack(pady=20)
 
         # Status Label
         self.status_label = tk.Label(self.root, text=f"Words generated this session: {len(self.session_words)}", fg="gray")
@@ -82,6 +99,13 @@ class GameCardGeneratorApp:
     def set_preset(self, text):
         self.criteria_entry.delete(0, tk.END)
         self.criteria_entry.insert(0, text)
+
+    def choose_color(self):
+        # Opens the native OS color picker (includes HSV/Spectrum tools)
+        color_code = colorchooser.askcolor(title="Choose Card Background Color", initialcolor=self.card_color)[1]
+        if color_code:  # If user didn't hit cancel
+            self.card_color = color_code
+            self.color_preview.config(bg=self.card_color)
 
     def start_generation_thread(self):
         if API_KEY == "YOUR_API_KEY_HERE":
@@ -101,7 +125,6 @@ class GameCardGeneratorApp:
 
     def _process_generation(self, criteria):
         try:
-            # Structuring the instructions for the AI
             prompt = f"""
             Generate exactly 80 unique, distinct nouns/concepts for a party guessing game based on these criteria: {criteria}.
             The words must be fun to describe and guess. 
@@ -109,13 +132,11 @@ class GameCardGeneratorApp:
             Respond ONLY with a raw JSON array of 80 strings. Do not include markdown formatting or the word 'json'.
             """
 
-            # Request generation
             response = self.client.models.generate_content(
                 model='gemini-2.5-flash',
                 contents=prompt,
             )
             
-            # Clean up response text
             raw_text = response.text.strip()
             if raw_text.startswith("```json"):
                 raw_text = raw_text[7:]
@@ -129,35 +150,29 @@ class GameCardGeneratorApp:
             if len(new_words) < 80:
                 raise ValueError("AI did not generate enough words.")
 
-            # Truncate and shuffle
             final_words = new_words[:80]
             random.shuffle(final_words)
 
-            # Send the results back to the main GUI thread safely
             self.root.after(0, lambda: self._finalize_generation(final_words, criteria))
 
         except Exception as e:
-            # Send the error back to the main GUI thread safely
             self.root.after(0, lambda error=e: self._generation_error(error))
 
     def _finalize_generation(self, words, criteria):
-        # Update session memory
         self.session_words.update(words)
         self.status_label.config(text=f"Words generated this session: {len(self.session_words)}")
 
-        # Create the HTML file
-        self.create_html_file(words, criteria)
+        # Pass the current color to the HTML generator
+        self.create_html_file(words, criteria, self.card_color)
         
-        # Reset UI
         self.generate_btn.config(text="Generate 1 New Page (16 Cards)", state="normal")
         messagebox.showinfo("Success", "Cards generated! Opening in your browser for printing.")
 
     def _generation_error(self, error):
-        # Reset UI on error
         self.generate_btn.config(text="Generate 1 New Page (16 Cards)", state="normal")
         messagebox.showerror("Error", f"Failed to generate cards. Ensure your API key is correct.\n\nDetails: {error}")
 
-    def create_html_file(self, words, criteria):
+    def create_html_file(self, words, criteria, color):
         # 1. GENERATE THE CHRONOLOGICAL FILENAME
         clean_slug = re.sub(r'[^a-z0-9]+', '_', criteria.lower()).strip('_')
         if len(clean_slug) > 40:
@@ -167,10 +182,12 @@ class GameCardGeneratorApp:
         filename = f"cards_{timestamp}_{clean_slug}.html" if clean_slug else f"cards_{timestamp}.html"
         file_path = os.path.join(self.output_dir, filename)
 
-        # 2. GENERATE THE HTML (With Prompt Metadata Injected)
+        # 2. GENERATE THE HTML
+        # Injects prompt AND color into the comment, the body tag, and the CSS
         html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- GENERATED WITH PROMPT: {criteria} | COLOR USED: {color} -->
 <meta charset="UTF-8">
 <title>Game Card Generator</title>
 <style>
@@ -178,11 +195,11 @@ class GameCardGeneratorApp:
   body {{ font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f0f0f0; }}
   .page {{ width: 297mm; height: 210mm; background: white; margin: 0 auto; display: flex; justify-content: center; align-items: center; box-sizing: border-box; padding: 10mm; }}
   .grid {{ display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(4, 1fr); width: 100%; height: 100%; border-top: 1px dashed #ccc; border-left: 1px dashed #ccc; }}
-  .card {{ border-right: 1px dashed #ccc; border-bottom: 1px dashed #ccc; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 5mm; box-sizing: border-box; }}
+  .card {{ background-color: {color}; border-right: 1px dashed #ccc; border-bottom: 1px dashed #ccc; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 5mm; box-sizing: border-box; }}
   .word {{ font-size: 13pt; font-weight: bold; margin: 2px 0; text-transform: uppercase; line-height: 1.1; }}
 </style>
 </head>
-<body data-prompt="{criteria}">
+<body data-prompt="{criteria}" data-color="{color}">
 <div class="page"><div class="grid">
 """
 
