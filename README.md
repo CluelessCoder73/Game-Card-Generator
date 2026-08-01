@@ -4,6 +4,8 @@ Game Card Generator is a lightweight, asynchronous desktop application designed 
 
 > **Disclaimer:** This project is an independent utility and is not affiliated with, endorsed by, or associated with the official *30 Seconds* board game or its trademark holders. It utilizes Nominative Fair Use to describe compatibility.
 
+![image alt](https://github.com/CluelessCoder73/Game-Card-Generator/blob/a19abec062cb49ea11311d1a9690338a1c571b18/game_card_generator.png)
+
 Built with Python, Tkinter, and the modern Google Gemini API (`google-genai`), the app delivers endless variety straight to a beautifully formatted, print-ready A4 landscape HTML grid.
 
 ---
