@@ -22,11 +22,15 @@ class GameCardGeneratorApp:
         self.root.title("Game Card Generator")
         self.root.geometry("600x650")
         
-        # Session memory to ensure NO repeats while the app is open
-        self.session_words = set()
+        # Locate the directory where this script lives
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.db_path = os.path.join(self.script_dir, "used_words.json")
+
+        # Load persistent database from file
+        self.session_words = self.load_database()
         
         # Default save directory (where the script is located)
-        self.output_dir = os.getcwd()
+        self.output_dir = self.script_dir
         
         # Default card color (White)
         self.card_color = "#ffffff"
@@ -35,6 +39,26 @@ class GameCardGeneratorApp:
         self.client = genai.Client(api_key=API_KEY)
 
         self.setup_ui()
+
+    def load_database(self):
+        """Loads used words from used_words.json if it exists."""
+        if os.path.exists(self.db_path):
+            try:
+                with open(self.db_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return set(data)
+            except Exception as e:
+                print(f"Failed to load database: {e}")
+                return set()
+        return set()
+
+    def save_database(self):
+        """Saves current word set to used_words.json."""
+        try:
+            with open(self.db_path, "w", encoding="utf-8") as f:
+                json.dump(sorted(list(self.session_words)), f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Failed to save database: {e}")
 
     def setup_ui(self):
         # --- Save Location Section ---
@@ -87,7 +111,7 @@ class GameCardGeneratorApp:
         self.generate_btn.pack(pady=20)
 
         # Status Label
-        self.status_label = tk.Label(self.root, text=f"Words generated this session: {len(self.session_words)}", fg="gray")
+        self.status_label = tk.Label(self.root, text=f"Total words in persistent database: {len(self.session_words)}", fg="gray")
         self.status_label.pack(side="bottom", pady=10)
 
     def choose_directory(self):
@@ -101,9 +125,8 @@ class GameCardGeneratorApp:
         self.criteria_entry.insert(0, text)
 
     def choose_color(self):
-        # Opens the native OS color picker (includes HSV/Spectrum tools)
         color_code = colorchooser.askcolor(title="Choose Card Background Color", initialcolor=self.card_color)[1]
-        if color_code:  # If user didn't hit cancel
+        if color_code:  
             self.card_color = color_code
             self.color_preview.config(bg=self.card_color)
 
@@ -117,10 +140,7 @@ class GameCardGeneratorApp:
             messagebox.showwarning("Warning", "Please enter some search criteria.")
             return
 
-        # Disable button and update UI instantly
         self.generate_btn.config(text="Generating... Please wait", state="disabled")
-        
-        # Start a background thread so the app does not freeze while waiting for Google
         threading.Thread(target=self._process_generation, args=(criteria,), daemon=True).start()
 
     def _process_generation(self, criteria):
@@ -159,10 +179,13 @@ class GameCardGeneratorApp:
             self.root.after(0, lambda error=e: self._generation_error(error))
 
     def _finalize_generation(self, words, criteria):
+        # Update set and save to database file
         self.session_words.update(words)
-        self.status_label.config(text=f"Words generated this session: {len(self.session_words)}")
+        self.save_database()
+        
+        self.status_label.config(text=f"Total words in persistent database: {len(self.session_words)}")
 
-        # Pass the current color to the HTML generator
+        # Create the HTML file
         self.create_html_file(words, criteria, self.card_color)
         
         self.generate_btn.config(text="Generate 1 New Page (16 Cards)", state="normal")
@@ -173,7 +196,6 @@ class GameCardGeneratorApp:
         messagebox.showerror("Error", f"Failed to generate cards. Ensure your API key is correct.\n\nDetails: {error}")
 
     def create_html_file(self, words, criteria, color):
-        # 1. GENERATE THE CHRONOLOGICAL FILENAME
         clean_slug = re.sub(r'[^a-z0-9]+', '_', criteria.lower()).strip('_')
         if len(clean_slug) > 40:
             clean_slug = clean_slug[:40].rstrip('_')
@@ -182,8 +204,6 @@ class GameCardGeneratorApp:
         filename = f"cards_{timestamp}_{clean_slug}.html" if clean_slug else f"cards_{timestamp}.html"
         file_path = os.path.join(self.output_dir, filename)
 
-        # 2. GENERATE THE HTML
-        # Injects prompt AND color into the comment, the body tag, and the CSS
         html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -216,7 +236,6 @@ class GameCardGeneratorApp:
 </html>
 """
 
-        # 3. SAVE AND OPEN
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         
