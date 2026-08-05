@@ -8,6 +8,8 @@ Game Card Generator is a lightweight, asynchronous desktop application designed 
 > 
 > 
 
+![image alt](https://github.com/CluelessCoder73/Game-Card-Generator/blob/d34bfbacd2a46045f81920ec0be184b28586fed2/game_card_generator.jpg)
+
 Built with Python, Tkinter, and the modern Google Gemini API (`google-genai`), the app delivers endless variety straight to a beautifully formatted, print-ready A4 landscape HTML grid.
 
 ---
